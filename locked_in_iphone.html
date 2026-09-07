@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><title>LOCKED IN</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Arial;color:white;touch-action:none}canvas{width:100%;height:100%;display:block}
+#ui{position:fixed;inset:0;pointer-events:none}.screen{position:fixed;inset:0;background:radial-gradient(circle,#181818,#000 75%);display:flex;align-items:center;justify-content:center;text-align:center;padding:28px;z-index:10}.card{max-width:520px}h1{font-size:42px;letter-spacing:8px;margin:0 0 12px}button{border:0;border-radius:14px;padding:15px 25px;font-size:17px;font-weight:bold}.hide{display:none!important}
+#top{position:absolute;top:max(22px,env(safe-area-inset-top));width:100%;text-align:center;font-weight:bold;text-shadow:0 2px 5px #000}#timer{font-size:30px}#status{font-size:14px;letter-spacing:2px}
+#joy{position:absolute;left:22px;bottom:28px;width:132px;height:132px;border:2px solid #aaa8;border-radius:50%;background:#ffffff12;pointer-events:auto}.stick{position:absolute;width:54px;height:54px;left:37px;top:37px;border-radius:50%;background:#ddd9}
+#look{position:absolute;right:0;top:0;width:62%;height:72%;pointer-events:auto}
+.ctrl{position:absolute;bottom:32px;width:68px;height:68px;border-radius:50%;background:#ffffff22;border:2px solid #aaa;color:#fff;font-size:12px;pointer-events:auto}.ctrl:active{background:#fff4}.jump{right:115px}.run{right:30px}.flash{right:30px;bottom:115px}
+#cross{position:absolute;left:50%;top:50%;width:4px;height:4px;border-radius:50%;background:#fff;transform:translate(-50%,-50%);opacity:.8}
+</style></head><body><canvas id="c"></canvas>
+<div id="start" class="screen"><div class="card"><h1>LOCKED IN</h1><p>You are trapped inside an abandoned school.</p><p>Something is crawling through the halls.</p><p><b>Reach the EXIT.</b></p><p>🔦 Find your way out. 👻 Don't let it catch you.</p><button id="go">ENTER THE SCHOOL</button><p style="opacity:.6;font-size:12px">Headphones recommended</p></div></div>
+<div id="end" class="screen hide"><div class="card"><h1 id="et">YOU DIED</h1><p id="ed"></p><button onclick="location.reload()">TRY AGAIN</button></div></div>
+<div id="ui"><div id="top"><div id="timer"></div><div id="status"></div></div><div id="cross"></div><div id="look"></div><div id="joy"><div class="stick"></div></div><button class="ctrl jump" id="jump">JUMP</button><button class="ctrl run" id="run">RUN</button><button class="ctrl flash" id="flash">🔦</button></div>
+<script>
+const C=document.getElementById('c'),x=C.getContext('2d');let W,H,dpr;
+let game=false,dead=false,start=0,active=false,flash=true,yaw=0,pitch=0;
+let px=0,pz=13,py=0,vy=0,ghost={x:0,z:-25};
+let joyX=0,joyY=0,running=false,jumping=false,last=0,lookLastX=0,lookLastY=0;
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;C.width=W*dpr;C.height=H*dpr;x.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
+const walls=[[-15,-18,1,70],[15,-18,1,70],[-7,4,16,.5],[7,-5,16,.5],[-7,-14,16,.5],[7,-23,16,.5],[0,-50,30,1]];
+function collide(nx,nz){if(nx<-14||nx>14||nz>14||nz<-49)return true;for(const w of walls)if(Math.abs(nx-w[0])<w[2]/2+.35&&Math.abs(nz-w[1])<w[3]/2+.35)return true;return false}
+function input(){let ax=joyX,ay=joyY;if(Math.abs(ax)+Math.abs(ay)<.1)return;let s=(running?5.6:3.5);let a=yaw;let dx=(ax*Math.cos(a)-ay*Math.sin(a))*s*dt,dz=(ax*Math.sin(a)+ay*Math.cos(a))*s*dt;if(!collide(px+dx,pz))px+=dx;if(!collide(px,pz+dz))pz+=dz}
+function draw(){x.fillStyle='#020306';x.fillRect(0,0,W,H);let grd=x.createRadialGradient(W/2,H*.52,20,W/2,H*.52,Math.min(W,H)*.72);grd.addColorStop(0,flash?'#34353a':'#111216');grd.addColorStop(1,'#010102');x.fillStyle=grd;x.fillRect(0,0,W,H);
+ // corridor
+ x.fillStyle='#25242a';x.fillRect(W*.1,H*.25,W*.8,H*.55);x.fillStyle='#17171b';x.beginPath();x.moveTo(W*.1,H*.25);x.lineTo(W*.9,H*.25);x.lineTo(W*.7,H*.05);x.lineTo(W*.3,H*.05);x.closePath();x.fill();
+ // lockers
+ for(let i=0;i<10;i++){x.fillStyle='#303d43';x.fillRect(W*.12+i*W*.075,H*.38, W*.055,H*.25)}
+ // exit
+ x.fillStyle='#174c2b';x.fillRect(W*.43,H*.20,W*.14,H*.07);x.fillStyle='#aaffaa';x.font='bold 22px Arial';x.textAlign='center';x.fillText('EXIT',W*.5,H*.25);
+ // ghost if active
+ if(active){let dx=ghost.x-px,dz=ghost.z-pz,dist=Math.hypot(dx,dz),front=Math.cos(yaw)*dx+Math.sin(yaw)*dz;if(front>0&&dist<25){let sx=W/2+(Math.sin(yaw)*dx-Math.cos(yaw)*dz)*W*.035/dist, sy=H*.5-Math.min(180,1200/dist);let sc=Math.max(.4,7/dist);x.save();x.translate(sx,sy);x.scale(sc,sc);x.fillStyle='#dddde3';x.beginPath();x.ellipse(0,25,25,38,0,0,Math.PI*2);x.fill();x.beginPath();x.arc(0,-22,24,0,Math.PI*2);x.fill();x.fillStyle='#050505';x.beginPath();x.arc(-8,-25,4,0,7);x.arc(8,-25,4,0,7);x.fill();x.strokeStyle='#bbb';x.lineWidth=9;x.beginPath();x.moveTo(-20,40);x.lineTo(-42,65);x.moveTo(20,40);x.lineTo(42,65);x.stroke();x.restore()}}
+ // vignette
+ let v=x.createRadialGradient(W/2,H/2,Math.min(W,H)*.15,W/2,H/2,Math.max(W,H)*.7);v.addColorStop(0,'transparent');v.addColorStop(1,'rgba(0,0,0,.85)');x.fillStyle=v;x.fillRect(0,0,W,H)}
+function loop(t){dt=Math.min((t-last)/1000,.05);last=t;if(game&&!dead){input();if(jumping&&py<=0){vy=7.2;jumping=false}vy-=18*dt;py+=vy*dt;if(py<0){py=0;vy=0}
+ let elapsed=(t-start)/1000;if(!active){let left=Math.ceil(10-elapsed);document.getElementById('timer').textContent=left>0?left:'';document.getElementById('status').textContent=left>0?'YOU HAVE A 10 SECOND HEAD START':'IT IS COMING';if(elapsed>=10){active=true;document.getElementById('status').textContent='IT IS COMING'}}else{let dx=px-ghost.x,dz=pz-ghost.z,d=Math.hypot(dx,dz);let s=1.55;if(d<7)s=2.0;ghost.x+=dx/d*s*dt;ghost.z+=dz/d*s*dt;if(d<.8){dead=true;document.getElementById('et').textContent='IT FOUND YOU';document.getElementById('ed').textContent='You hear crawling right behind you.';document.getElementById('end').classList.remove('hide')}}if(Math.hypot(px,pz+49)<2.5){dead=true;document.getElementById('et').textContent='YOU ESCAPED';document.getElementById('ed').textContent='You made it out. The doors slam shut behind you.';document.getElementById('end').classList.remove('hide')}}draw();requestAnimationFrame(loop)}
+document.getElementById('go').onclick=()=>{document.getElementById('start').classList.add('hide');game=true;start=performance.now();requestAnimationFrame(loop)};
+function joy(e){let r=document.getElementById('joy').getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,m=Math.min(48,Math.hypot(dx,dy)),a=Math.atan2(dy,dx);joyX=Math.cos(a)*m/48;joyY=Math.sin(a)*m/48;document.querySelector('.stick').style.transform=`translate(${joyX*38}px,${joyY*38}px)`}
+let jt=null;document.getElementById('joy').addEventListener('touchstart',e=>{jt=e.changedTouches[0].identifier;joy(e.changedTouches[0])},{passive:false});document.getElementById('joy').addEventListener('touchmove',e=>{for(let q of e.changedTouches)if(q.identifier===jt)joy(q)},{passive:false});document.getElementById('joy').addEventListener('touchend',e=>{joyX=joyY=0;document.querySelector('.stick').style.transform='translate(0,0)'});
+document.getElementById('look').addEventListener('touchstart',e=>{let q=e.changedTouches[0];lookLastX=q.clientX;lookLastY=q.clientY},{passive:false});document.getElementById('look').addEventListener('touchmove',e=>{let q=e.changedTouches[0];yaw+=(q.clientX-lookLastX)*.006;pitch+=(q.clientY-lookLastY)*.003;pitch=Math.max(-.8,Math.min(.8,pitch));lookLastX=q.clientX;lookLastY=q.clientY;e.preventDefault()},{passive:false});
+document.getElementById('jump').ontouchstart=()=>{jumping=true};document.getElementById('run').ontouchstart=()=>running=true;document.getElementById('run').ontouchend=()=>running=false;document.getElementById('flash').ontouchstart=()=>{flash=!flash};
+</script></body></html>
